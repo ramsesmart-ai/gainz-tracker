@@ -229,7 +229,7 @@ body {
 .exercise-header { display: flex; align-items: center; gap: 12px; }
 
 .ex-name-input {
-  flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border-2);
@@ -318,7 +318,7 @@ body {
 .add-ex-row { display: flex; gap: 12px; }
 
 .add-ex-input {
-  flex: 1;
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
@@ -332,6 +332,45 @@ body {
 
 .add-ex-input::placeholder { color: var(--text-2); }
 .add-ex-input:focus { border-color: var(--border-2); }
+
+/* ── Exercise autocomplete dropdown ───────────────────── */
+.ex-autocomplete {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.ex-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  z-index: 200;
+  max-height: 240px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  -webkit-overflow-scrolling: touch;
+}
+
+.ex-option {
+  padding: 11px 14px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-option:hover,
+.ex-option:active { background: var(--surface-3); }
 
 /* ── Volume chip ───────────────────────────────────────── */
 .volume-chip {
@@ -795,6 +834,14 @@ body {
   .body-two-col { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 480px) {
+  /* On narrow screens, hide exercise count — keep date + split-tag + chevron */
+  .history-summary { display: none; }
+  .history-date    { font-size: 13px; }
+  .split-tag       { font-size: 10px; padding: 2px 6px; }
+  .history-toggle  { gap: 10px; padding: 16px 18px; }
+}
+
 /* ── Weekly table ──────────────────────────────────────── */
 .wk-table { display: flex; flex-direction: column; gap: 0; }
 
@@ -945,9 +992,10 @@ body {
   text-align: left;
 }
 
-.history-date    { font-size: 15px; font-weight: 700; flex: 1; }
-.history-summary { font-size: 12px; font-weight: 500; color: var(--text-2); }
-.chevron         { font-size: 9px; color: var(--text-2); }
+.history-date    { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-tag       { font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 2px 8px; letter-spacing: 0.02em; flex-shrink: 0; white-space: nowrap; }
+.history-summary { font-size: 12px; font-weight: 500; color: var(--text-2); flex-shrink: 0; }
+.chevron         { font-size: 9px; color: var(--text-2); flex-shrink: 0; }
 
 .history-body {
   border-top: 1px solid var(--border);

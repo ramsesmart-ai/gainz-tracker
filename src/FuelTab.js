@@ -69,7 +69,10 @@ export default function FuelTab() {
         256,
       );
       const parsed = parseJSONFromAI(raw);
-      persistMeals([...meals, { id: uid(), ...parsed }]);
+      // Read fresh from localStorage to avoid stale closure if another meal was added while awaiting
+      const freshNutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
+      const freshMeals = freshNutrition[todayStr()] || [];
+      persistMeals([...freshMeals, { id: uid(), ...parsed }]);
       setFoodInput('');
     } catch (e) {
       setError('Could not estimate: ' + e.message);

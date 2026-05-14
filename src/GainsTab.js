@@ -123,6 +123,7 @@ ${JSON.stringify(workouts.slice(0, 10), null, 2)}`,
                       weekday: 'short', month: 'short', day: 'numeric',
                     })}
                   </span>
+                  {w.split && <span className="split-tag">{w.split}</span>}
                   <span className="history-summary">
                     {w.exercises.length} exercise{w.exercises.length !== 1 ? 's' : ''}
                   </span>

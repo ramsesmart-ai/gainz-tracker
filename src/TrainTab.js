@@ -1,19 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { uid, todayStr, getApiKey, callAI, parseJSONFromAI } from './utils';
 
-// ── Exercise autocomplete list ────────────────────────────
+// ── Exercise lists per split ──────────────────────────────
 
-const EXERCISES = [
-  'Bench Press','Incline Bench Press','Decline Bench Press',
-  'Squat','Front Squat','Hack Squat','Goblet Squat',
-  'Deadlift','Romanian Deadlift','Sumo Deadlift',
-  'Overhead Press','Push Press','Lateral Raises','Face Pulls',
-  'Pull-ups','Chin-ups','Lat Pulldown','Cable Row','Barbell Row',
-  'Bicep Curl','Hammer Curl','Preacher Curl',
-  'Tricep Pushdown','Skull Crushers','Tricep Dips',
-  'Leg Press','Leg Curl','Leg Extension','Calf Raises',
-  'Hip Thrust','Glute Bridge','Bulgarian Split Squat',
-];
+const SPLIT_EXERCISES = {
+  'Chest / Back': [
+    'Bench Press','Incline Bench Press','Incline Smith Machine','Incline Dumbbell Press',
+    'Decline Bench Press','Cable Flyes','Cable Chest Flyes','Cable Crossover','Pec Deck',
+    'Chest Press Machine','Cable Pullover','Lat Pulldown','Seated Cable Row','Barbell Row',
+    'T-Bar Row','Pull Ups','Face Pulls','Seated Row Machine',
+  ],
+  'Shoulders / Arms': [
+    'Dumbbell Shoulder Press','Barbell Overhead Press','Lateral Raises','Front Raises',
+    'Rear Delt Flyes','Cable Lateral Raises','Cable Front Raises','Cable Rear Delt Flyes',
+    'Barbell Curl','Dumbbell Curl','Hammer Curl','Cable Curl','Cable Hammer Curl',
+    'Tricep Extension','Skull Crushers','Tricep Pushdown','Overhead Tricep Extension',
+    'Cable Tricep Pushdown','Cable Overhead Tricep Extension','Cable Rope Pushdown',
+  ],
+  'Legs': [
+    'Squat','Leg Press','Romanian Deadlift','Leg Curl','Leg Extension','Walking Lunges',
+    'Calf Raises','Hip Thrust','Hack Squat','Goblet Squat','Smith Machine Squat',
+    'Leg Press Calf Raises','Cable Kickbacks','Cable Pull Through',
+  ],
+};
 
 // ── Split detection ───────────────────────────────────────
 
@@ -37,7 +46,7 @@ function detectSplit(workout) {
 
 function suggestNextSplit(workouts) {
   for (const w of workouts) {
-    const s = detectSplit(w);
+    const s = w.split || detectSplit(w);
     if (s) return SPLITS[(SPLITS.indexOf(s) + 1) % SPLITS.length];
   }
   return SPLITS[0];
@@ -48,29 +57,104 @@ function suggestNextSplit(workouts) {
 const blankSet = () => ({ id: uid(), reps: '', weight: '' });
 const blankExercise = (name = '') => ({ id: uid(), name, sets: [blankSet()] });
 
+// ── Custom exercise autocomplete — works on mobile ────────
+
+function ExerciseInput({ value, onChange, list, placeholder, className, onEnter }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  const filtered = list.filter(ex =>
+    !value.trim() || ex.toLowerCase().includes(value.toLowerCase())
+  );
+
+  useEffect(() => {
+    const close = e => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, []);
+
+  return (
+    <div className="ex-autocomplete" ref={wrapRef}>
+      <input
+        className={className}
+        placeholder={placeholder}
+        value={value}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { onEnter?.(); setOpen(false); }
+          if (e.key === 'Escape') setOpen(false);
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="ex-dropdown">
+          {filtered.map(ex => (
+            <li
+              key={ex}
+              className="ex-option"
+              onPointerDown={e => { e.preventDefault(); onChange(ex); setOpen(false); }}
+            >
+              {ex}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────
 
+const DRAFT_KEY = 'gainz_draft_workout';
+
 export default function TrainTab() {
-  const [exercises, setExercises]   = useState([blankExercise()]);
-  const [newName, setNewName]       = useState('');
-  const [saved, setSaved]           = useState(false);
+  const [exercises, setExercises]         = useState([blankExercise()]);
+  const [newName, setNewName]             = useState('');
+  const [saved, setSaved]                 = useState(false);
   const [selectedSplit, setSelectedSplit] = useState(SPLITS[0]);
   const [loadingPlan, setLoadingPlan]     = useState(false);
   const [plan, setPlan]                   = useState(null);
   const [planError, setPlanError]         = useState('');
+  const [draftReady, setDraftReady]       = useState(false);
 
+  // Restore from in-progress draft or today's saved workout on mount
   useEffect(() => {
     const workouts = JSON.parse(localStorage.getItem('gainz_workouts') || '[]');
-    const today = workouts.find(w => w.date === todayStr());
-    if (today?.exercises?.length) setExercises(today.exercises);
-    setSelectedSplit(suggestNextSplit(workouts));
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+
+    if (draft?.date === todayStr() && draft.exercises?.some(e => e.name.trim())) {
+      setExercises(draft.exercises);
+      setSelectedSplit(draft.selectedSplit || SPLITS[0]);
+    } else {
+      const today = workouts.find(w => w.date === todayStr());
+      if (today?.exercises?.length) {
+        setExercises(today.exercises);
+        if (today.split) setSelectedSplit(today.split);
+      } else {
+        setSelectedSplit(suggestNextSplit(workouts));
+      }
+    }
+    setDraftReady(true);
   }, []);
+
+  // Auto-save draft on every change — only starts after initial load
+  useEffect(() => {
+    if (!draftReady) return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      date: todayStr(), exercises, selectedSplit,
+    }));
+  }, [exercises, selectedSplit, draftReady]);
 
   // ── Exercise state helpers
   const setEx = fn => setExercises(prev => fn(prev));
-  const removeExercise = id    => setEx(prev => prev.filter(e => e.id !== id));
+  const removeExercise = id         => setEx(prev => prev.filter(e => e.id !== id));
   const updateExName   = (id, name) => setEx(prev => prev.map(e => e.id === id ? { ...e, name } : e));
-  const addSet         = id    => setEx(prev => prev.map(e => e.id === id ? { ...e, sets: [...e.sets, blankSet()] } : e));
+  const addSet         = id         => setEx(prev => prev.map(e => e.id === id ? { ...e, sets: [...e.sets, blankSet()] } : e));
   const removeSet      = (eid, sid) => setEx(prev => prev.map(e => e.id === eid ? { ...e, sets: e.sets.filter(s => s.id !== sid) } : e));
   const updateSet      = (eid, sid, field, val) => setEx(prev =>
     prev.map(e => e.id === eid ? { ...e, sets: e.sets.map(s => s.id === sid ? { ...s, [field]: val } : s) } : e)
@@ -85,9 +169,10 @@ export default function TrainTab() {
   const saveWorkout = () => {
     const valid = exercises.filter(e => e.name.trim() && e.sets.some(s => s.reps && s.weight));
     if (!valid.length) return;
-    const workout = { id: uid(), date: todayStr(), exercises: valid };
+    const workout = { id: uid(), date: todayStr(), split: selectedSplit, exercises: valid };
     const existing = JSON.parse(localStorage.getItem('gainz_workouts') || '[]');
     localStorage.setItem('gainz_workouts', JSON.stringify([workout, ...existing.filter(w => w.date !== todayStr())]));
+    localStorage.removeItem(DRAFT_KEY);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -99,7 +184,7 @@ export default function TrainTab() {
     setLoadingPlan(true); setPlan(null); setPlanError('');
 
     const workouts = JSON.parse(localStorage.getItem('gainz_workouts') || '[]');
-    const lastForSplit = workouts.find(w => detectSplit(w) === selectedSplit);
+    const lastForSplit = workouts.find(w => (w.split || detectSplit(w)) === selectedSplit);
 
     const system = `You are a strength coach. Return ONLY a valid JSON object — no markdown, no explanation — in exactly this structure:
 {
@@ -148,22 +233,20 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
     setPlan(null);
   };
 
+  const splitList = SPLIT_EXERCISES[selectedSplit] || [];
   const totalVolume = exercises.reduce((t, e) =>
     t + e.sets.reduce((s, set) => s + (parseFloat(set.weight) || 0) * (parseInt(set.reps) || 0), 0), 0
   );
-
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
     <div className="tab-pane">
-      <datalist id="ex-list">{EXERCISES.map(e => <option key={e} value={e} />)}</datalist>
-
       <div className="section-header">
         <h2>Today's Session</h2>
         <span className="date-badge">{dateLabel}</span>
       </div>
 
-      {/* AI Split suggestion */}
+      {/* Split selector */}
       <div className="card">
         <h3>Today's Split</h3>
         <div className="split-btns">
@@ -214,12 +297,12 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
       {exercises.map(ex => (
         <div key={ex.id} className="exercise-card">
           <div className="exercise-header">
-            <input
-              list="ex-list"
+            <ExerciseInput
               className="ex-name-input"
               placeholder="Exercise name..."
               value={ex.name}
-              onChange={e => updateExName(ex.id, e.target.value)}
+              list={splitList}
+              onChange={name => updateExName(ex.id, name)}
             />
             <button className="icon-btn danger" onClick={() => removeExercise(ex.id)}>×</button>
           </div>
@@ -244,9 +327,14 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
       ))}
 
       <div className="add-ex-row">
-        <input list="ex-list" className="add-ex-input" placeholder="Add exercise..."
-          value={newName} onChange={e => setNewName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addExercise()} />
+        <ExerciseInput
+          className="add-ex-input"
+          placeholder="Add exercise..."
+          value={newName}
+          list={splitList}
+          onChange={setNewName}
+          onEnter={addExercise}
+        />
         <button className="btn-secondary" onClick={addExercise}>Add</button>
       </div>
 

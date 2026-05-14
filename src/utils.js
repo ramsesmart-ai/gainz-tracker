@@ -1,7 +1,10 @@
 // ── Shared helpers ──────────────────────────────────────
 
 export const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-export const todayStr = () => new Date().toISOString().slice(0, 10);
+export const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ── Profile ──────────────────────────────────────────────
 
