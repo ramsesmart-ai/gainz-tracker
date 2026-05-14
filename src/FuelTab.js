@@ -95,9 +95,32 @@ export default function FuelTab() {
     try {
       const raw = await callAI(
         apiKey,
-        `You are a nutritionist. Return ONLY a valid JSON object with these exact fields: name (string), protein (number, grams), carbs (number, grams), fat (number, grams), calories (number). No markdown, no explanation, just the JSON.`,
+        `You are a precise nutritionist. Return ONLY a valid JSON object with these exact fields: name (string), quantity (string, e.g. "240g" or "2 bars" or "1 cup"), protein (number, grams), carbs (number, grams), fat (number, grams), calories (number). No markdown, no explanation, just the JSON.
+
+Use these accurate cooked/prepared values per 100g unless the user specifies otherwise:
+- Cooked chicken breast: 31g protein, 0g carbs, 3.6g fat, 165 kcal
+- Cooked ground beef (90% lean): 26g protein, 0g carbs, 10g fat, 196 kcal
+- Cooked white rice: 2.7g protein, 28g carbs, 0.3g fat, 130 kcal
+- Cooked brown rice: 2.6g protein, 23g carbs, 0.9g fat, 112 kcal
+- Cooked oats (oatmeal): 2.5g protein, 12g carbs, 1.5g fat, 71 kcal
+- Whole egg (large, ~50g): 6g protein, 0.4g carbs, 5g fat, 70 kcal
+- Egg whites (large): 3.6g protein, 0.2g carbs, 0g fat, 17 kcal
+- Whole milk (240ml): 8g protein, 12g carbs, 8g fat, 150 kcal
+- Greek yogurt plain (100g): 10g protein, 4g carbs, 0.5g fat, 59 kcal
+- Cottage cheese (100g): 11g protein, 3g carbs, 4g fat, 90 kcal
+- Salmon (cooked, 100g): 25g protein, 0g carbs, 13g fat, 208 kcal
+- Tuna canned in water (100g): 26g protein, 0g carbs, 1g fat, 116 kcal
+- Broccoli cooked (100g): 2.8g protein, 7g carbs, 0.3g fat, 35 kcal
+- Sweet potato cooked (100g): 2g protein, 20g carbs, 0.1g fat, 90 kcal
+- Banana (medium, ~120g): 1.3g protein, 27g carbs, 0.4g fat, 105 kcal
+- Almonds (100g): 21g protein, 22g carbs, 50g fat, 579 kcal
+- Peanut butter (100g): 25g protein, 20g carbs, 50g fat, 598 kcal
+- Olive oil (100g): 0g protein, 0g carbs, 100g fat, 884 kcal
+- Bread white (1 slice ~30g): 2.7g protein, 14g carbs, 1g fat, 79 kcal
+
+For branded products (e.g. "Oikos Triple Zero", "Nature Valley bar", "Fairlife milk", "Quest bar", "Premier Protein shake"), use the official nutrition label values for that specific product. Scale all values to the exact quantity the user described.`,
         input,
-        256,
+        400,
       );
       const parsed = parseJSONFromAI(raw);
       const freshNutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
@@ -296,7 +319,7 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
           {meals.map(m => (
             <div key={m.id} className="meal-row">
               <div>
-                <span className="meal-name">{m.name}</span>
+                <span className="meal-name">{m.name}{m.quantity ? ` — ${m.quantity}` : ''}</span>
                 <span className="meal-meta">
                   {[
                     m.calories && `${Math.round(m.calories)} kcal`,
