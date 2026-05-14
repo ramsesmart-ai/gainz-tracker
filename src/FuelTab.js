@@ -116,7 +116,7 @@ export default function FuelTab() {
       setActiveDayDate(today);
       localStorage.setItem('gainz_active_day', JSON.stringify({ date: today, meals: todayMeals, isTraining: isTrainingDay }));
     }
-    setHistoryData(computeHistory(profile));
+    setHistoryData(computeHistory(getProfile()));
   }, []);
 
   useEffect(() => {
