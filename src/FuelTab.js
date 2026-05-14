@@ -1,3 +1,4 @@
+// v2.1
 import { useState, useEffect, useRef } from 'react';
 import { uid, todayStr, getProfile, getApiKey, callAI, streamAI, streamAIMessages, parseJSONFromAI } from './utils';
 
