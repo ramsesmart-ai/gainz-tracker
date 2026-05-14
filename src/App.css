@@ -480,7 +480,29 @@ body {
 .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-primary.saved { background: var(--green); }
 
-.save-btn { width: 100%; margin-top: 6px; }
+.workout-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.workout-actions .btn-primary { flex: 1; }
+
+.btn-discard {
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 24px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-discard:hover { color: var(--red); border-color: var(--red); }
 
 .btn-secondary {
   background: var(--surface-2);

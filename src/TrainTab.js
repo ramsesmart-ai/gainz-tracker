@@ -165,6 +165,16 @@ export default function TrainTab() {
     setNewName('');
   };
 
+  // ── Discard workout
+  const discardWorkout = () => {
+    if (!window.confirm('Discard your current workout? This cannot be undone.')) return;
+    localStorage.removeItem(DRAFT_KEY);
+    const existing = JSON.parse(localStorage.getItem('gainz_workouts') || '[]');
+    localStorage.setItem('gainz_workouts', JSON.stringify(existing.filter(w => w.date !== todayStr())));
+    setExercises([blankExercise()]);
+    setNewName('');
+  };
+
   // ── Save workout
   const saveWorkout = () => {
     const valid = exercises.filter(e => e.name.trim() && e.sets.some(s => s.reps && s.weight));
@@ -344,9 +354,14 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
         </div>
       )}
 
-      <button className={`btn-primary save-btn${saved ? ' saved' : ''}`} onClick={saveWorkout}>
-        {saved ? 'Saved!' : 'Save Workout'}
-      </button>
+      <div className="workout-actions">
+        <button className={`btn-primary${saved ? ' saved' : ''}`} onClick={saveWorkout}>
+          {saved ? 'Saved!' : 'Save Workout'}
+        </button>
+        <button className="btn-discard" onClick={discardWorkout}>
+          Discard
+        </button>
+      </div>
     </div>
   );
 }
