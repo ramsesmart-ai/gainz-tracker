@@ -28,74 +28,29 @@ function renderBuilderText(text) {
   });
 }
 
-export default function FuelTab() {
-  const profile = getProfile();
+function computeHistory(profile) {
+  const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
+  return Object.entries(nutrition)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .slice(0, 7)
+    .map(([date, entry]) => {
+      const meals = Array.isArray(entry) ? entry : (entry.meals || []);
+      const isTraining = !Array.isArray(entry) && (entry.isTraining ?? false);
+      const targets = isTraining ? profile.trainingTargets : profile.restTargets;
+      const totals = meals.reduce(
+        (acc, m) => ({
+          calories: acc.calories + (parseFloat(m.calories) || 0),
+          protein:  acc.protein  + (parseFloat(m.protein)  || 0),
+          carbs:    acc.carbs    + (parseFloat(m.carbs)    || 0),
+          fat:      acc.fat      + (parseFloat(m.fat)      || 0),
+        }),
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+      return { date, totals, targets };
+    });
+}
 
-  const [meals, setMeals]           = useState([]);
-  const [isTraining, setIsTraining] = useState(isTodayTrainingDay);
-  const [form, setForm]             = useState(blankForm());
-  const [showManual, setShowManual] = useState(false);
-  const [foodInput, setFoodInput]   = useState('');
-  const [estimating, setEstimating] = useState(false);
-  const [rec, setRec]               = useState('');
-  const [recLoading, setRecLoading] = useState(false);
-  const [error, setError]           = useState('');
-
-  // Meal builder chat state (session only — not persisted)
-  const [builderInput, setBuilderInput]   = useState('');
-  const [builderChat, setBuilderChat]     = useState([]);
-  const [builderLoading, setBuilderLoading] = useState(false);
-  const builderEndRef = useRef(null);
-
-  const goals = isTraining ? profile.trainingTargets : profile.restTargets;
-
-  useEffect(() => {
-    const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
-    setMeals(nutrition[todayStr()] || []);
-
-    const saved = JSON.parse(localStorage.getItem('gainz_day_type') || 'null');
-    if (saved?.date === todayStr()) {
-      setIsTraining(saved.isTraining);
-    }
-  }, []);
-
-  // Auto-scroll builder chat to bottom on new messages
-  useEffect(() => {
-    builderEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [builderChat]);
-
-  const selectDayType = (training) => {
-    setIsTraining(training);
-    localStorage.setItem('gainz_day_type', JSON.stringify({ date: todayStr(), isTraining: training }));
-  };
-
-  const persistMeals = updated => {
-    const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
-    nutrition[todayStr()] = updated;
-    localStorage.setItem('gainz_nutrition', JSON.stringify(nutrition));
-    setMeals(updated);
-  };
-
-  const removeMeal = id => persistMeals(meals.filter(m => m.id !== id));
-
-  const addManual = () => {
-    if (!form.name.trim()) return;
-    const calories = form.calories ? parseFloat(form.calories) : Math.round(macrosCal(form));
-    persistMeals([...meals, { id: uid(), ...form, calories }]);
-    setForm(blankForm());
-  };
-
-  const estimateMacros = async () => {
-    const input = foodInput.trim();
-    if (!input) return;
-    const apiKey = getApiKey();
-    if (!apiKey) { setError('Add your API key in Profile settings.'); return; }
-    setEstimating(true); setError('');
-
-    try {
-      const raw = await callAI(
-        apiKey,
-        `You are a precise nutritionist. Return ONLY a valid JSON object with these exact fields: name (string), quantity (string, e.g. "240g" or "2 bars" or "1 cup"), protein (number, grams), carbs (number, grams), fat (number, grams), calories (number). No markdown, no explanation, just the JSON.
+const ESTIMATION_SYSTEM = `You are a precise nutritionist. Return ONLY a valid JSON object with these exact fields: name (string), quantity (string, e.g. "240g" or "2 bars" or "1 cup"), protein (number, grams), carbs (number, grams), fat (number, grams), calories (number). No markdown, no explanation, just the JSON.
 
 Use these accurate cooked/prepared values per 100g unless the user specifies otherwise:
 - Cooked chicken breast: 31g protein, 0g carbs, 3.6g fat, 165 kcal
@@ -118,13 +73,90 @@ Use these accurate cooked/prepared values per 100g unless the user specifies oth
 - Olive oil (100g): 0g protein, 0g carbs, 100g fat, 884 kcal
 - Bread white (1 slice ~30g): 2.7g protein, 14g carbs, 1g fat, 79 kcal
 
-For branded products (e.g. "Oikos Triple Zero", "Nature Valley bar", "Fairlife milk", "Quest bar", "Premier Protein shake"), use the official nutrition label values for that specific product. Scale all values to the exact quantity the user described.`,
-        input,
-        400,
-      );
+For branded products (e.g. "Oikos Triple Zero", "Nature Valley bar", "Fairlife milk", "Quest bar", "Premier Protein shake"), use the official nutrition label values for that specific product. Scale all values to the exact quantity the user described.`;
+
+export default function FuelTab() {
+  const profile = getProfile();
+
+  const [meals, setMeals]                 = useState([]);
+  const [activeDayDate, setActiveDayDate] = useState(todayStr);
+  const [isTraining, setIsTraining]       = useState(isTodayTrainingDay);
+  const [form, setForm]                   = useState(blankForm());
+  const [showManual, setShowManual]       = useState(false);
+  const [foodInput, setFoodInput]         = useState('');
+  const [estimating, setEstimating]       = useState(false);
+  const [rec, setRec]                     = useState('');
+  const [recLoading, setRecLoading]       = useState(false);
+  const [error, setError]                 = useState('');
+  const [historyData, setHistoryData]     = useState([]);
+
+  const [builderInput, setBuilderInput]       = useState('');
+  const [builderChat, setBuilderChat]         = useState([]);
+  const [builderLoading, setBuilderLoading]   = useState(false);
+  const builderEndRef = useRef(null);
+
+  const goals = isTraining ? profile.trainingTargets : profile.restTargets;
+
+  useEffect(() => {
+    const active = JSON.parse(localStorage.getItem('gainz_active_day') || 'null');
+    if (active) {
+      setMeals(active.meals || []);
+      setIsTraining(active.isTraining ?? isTodayTrainingDay());
+      setActiveDayDate(active.date || todayStr());
+    } else {
+      // First launch — migrate any existing today's data from old format
+      const today = todayStr();
+      const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
+      const todayMeals = nutrition[today] || [];
+      const savedType = JSON.parse(localStorage.getItem('gainz_day_type') || 'null');
+      const isTrainingDay = savedType?.date === today ? savedType.isTraining : isTodayTrainingDay();
+      setMeals(todayMeals);
+      setIsTraining(isTrainingDay);
+      setActiveDayDate(today);
+      localStorage.setItem('gainz_active_day', JSON.stringify({ date: today, meals: todayMeals, isTraining: isTrainingDay }));
+    }
+    setHistoryData(computeHistory(profile));
+  }, []);
+
+  useEffect(() => {
+    builderEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [builderChat]);
+
+  const selectDayType = (training) => {
+    setIsTraining(training);
+    const active = JSON.parse(localStorage.getItem('gainz_active_day') || '{}');
+    active.isTraining = training;
+    localStorage.setItem('gainz_active_day', JSON.stringify(active));
+  };
+
+  const persistMeals = updated => {
+    const active = JSON.parse(localStorage.getItem('gainz_active_day') || `{"date":"${todayStr()}","isTraining":false}`);
+    active.meals = updated;
+    localStorage.setItem('gainz_active_day', JSON.stringify(active));
+    setMeals(updated);
+  };
+
+  const removeMeal = id => persistMeals(meals.filter(m => m.id !== id));
+
+  const addManual = () => {
+    if (!form.name.trim()) return;
+    const calories = form.calories ? parseFloat(form.calories) : Math.round(macrosCal(form));
+    persistMeals([...meals, { id: uid(), ...form, calories }]);
+    setForm(blankForm());
+  };
+
+  const estimateMacros = async () => {
+    const input = foodInput.trim();
+    if (!input) return;
+    const apiKey = getApiKey();
+    if (!apiKey) { setError('Add your API key in Profile settings.'); return; }
+    setEstimating(true); setError('');
+
+    try {
+      const raw = await callAI(apiKey, ESTIMATION_SYSTEM, input, 400);
       const parsed = parseJSONFromAI(raw);
-      const freshNutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
-      const freshMeals = freshNutrition[todayStr()] || [];
+      const freshActive = JSON.parse(localStorage.getItem('gainz_active_day') || '{}');
+      const freshMeals = freshActive.meals || [];
       persistMeals([...freshMeals, { id: uid(), ...parsed }]);
       setFoodInput('');
     } catch (e) {
@@ -132,6 +164,25 @@ For branded products (e.g. "Oikos Triple Zero", "Nature Valley bar", "Fairlife m
     } finally {
       setEstimating(false);
     }
+  };
+
+  const startNewDay = () => {
+    if (!window.confirm("Save today's log to history and start a fresh day?")) return;
+    const active = JSON.parse(localStorage.getItem('gainz_active_day') || '{}');
+    if (active.meals?.length > 0) {
+      const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
+      nutrition[active.date] = { meals: active.meals, isTraining: !!active.isTraining };
+      localStorage.setItem('gainz_nutrition', JSON.stringify(nutrition));
+    }
+    const today = todayStr();
+    const isTrainingDay = isTodayTrainingDay();
+    localStorage.setItem('gainz_active_day', JSON.stringify({ date: today, meals: [], isTraining: isTrainingDay }));
+    setMeals([]);
+    setIsTraining(isTrainingDay);
+    setActiveDayDate(today);
+    setRec('');
+    setBuilderChat([]);
+    setHistoryData(computeHistory(getProfile()));
   };
 
   const totals = meals.reduce(
@@ -225,7 +276,7 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
   };
 
   const autoCalPreview = macrosCal(form);
-  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const dateLabel = new Date(activeDayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
     <div className="tab-pane">
@@ -233,7 +284,10 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
       {/* Header */}
       <div className="section-header">
         <h2>Daily Fuel</h2>
-        <span className="date-badge">{dateLabel}</span>
+        <div className="fuel-header-right">
+          <span className="date-badge">{dateLabel}</span>
+          <button className="btn-new-day" onClick={startNewDay}>Start New Day</button>
+        </div>
       </div>
 
       {/* Day type toggle */}
@@ -423,6 +477,49 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
           </>
         )}
       </div>
+
+      {/* Macro History */}
+      <div className="section-header" style={{ marginTop: 8 }}>
+        <h2>History</h2>
+      </div>
+      {historyData.length === 0 ? (
+        <p className="empty-state" style={{ padding: '16px 0 32px' }}>
+          No history yet. Finish a day and tap "Start New Day" to save it.
+        </p>
+      ) : (
+        <div className="card">
+          <h3>Last 7 Days</h3>
+          <div className="macro-history-list">
+            {historyData.map(({ date, totals, targets }) => {
+              const hitCal = totals.calories >= targets.calories * 0.9;
+              const hitPro = totals.protein  >= targets.protein  * 0.9;
+              const hitCrb = totals.carbs    >= targets.carbs    * 0.9;
+              const hitFat = totals.fat      >= targets.fat      * 0.9;
+              return (
+                <div key={date} className="macro-hist-row">
+                  <span className="macro-hist-date">
+                    {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                  <div className="macro-hist-macros">
+                    <span className={`macro-hist-val${hitCal ? ' hit' : ' miss'}`}>
+                      {Math.round(totals.calories)}<span className="macro-hist-unit">kcal</span>
+                    </span>
+                    <span className={`macro-hist-val${hitPro ? ' hit' : ' miss'}`}>
+                      {Math.round(totals.protein)}<span className="macro-hist-unit">P</span>
+                    </span>
+                    <span className={`macro-hist-val${hitCrb ? ' hit' : ' miss'}`}>
+                      {Math.round(totals.carbs)}<span className="macro-hist-unit">C</span>
+                    </span>
+                    <span className={`macro-hist-val${hitFat ? ' hit' : ' miss'}`}>
+                      {Math.round(totals.fat)}<span className="macro-hist-unit">F</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
     </div>
   );
