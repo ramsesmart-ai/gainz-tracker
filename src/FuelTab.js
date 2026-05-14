@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { uid, todayStr, getProfile, getApiKey, callAI, streamAI, parseJSONFromAI } from './utils';
+import { useState, useEffect, useRef } from 'react';
+import { uid, todayStr, getProfile, getApiKey, callAI, streamAI, streamAIMessages, parseJSONFromAI } from './utils';
 
 const macrosCal = ({ protein = 0, carbs = 0, fat = 0 }) =>
   (parseFloat(protein) || 0) * 4 + (parseFloat(carbs) || 0) * 4 + (parseFloat(fat) || 0) * 9;
@@ -18,6 +18,16 @@ function isTodayTrainingDay() {
   return workouts.some(w => w.date === todayStr());
 }
 
+function renderBuilderText(text) {
+  return text.split('\n').map((line, i) => {
+    if (!line.trim()) return <div key={i} className="builder-spacer" />;
+    const parts = line.split(/(\*\*[^*]+\*\*)/g).map((part, j) =>
+      /^\*\*[^*]+\*\*$/.test(part) ? <strong key={j}>{part.slice(2, -2)}</strong> : part
+    );
+    return <p key={i}>{parts}</p>;
+  });
+}
+
 export default function FuelTab() {
   const profile = getProfile();
 
@@ -31,6 +41,12 @@ export default function FuelTab() {
   const [recLoading, setRecLoading] = useState(false);
   const [error, setError]           = useState('');
 
+  // Meal builder chat state (session only — not persisted)
+  const [builderInput, setBuilderInput]   = useState('');
+  const [builderChat, setBuilderChat]     = useState([]);
+  const [builderLoading, setBuilderLoading] = useState(false);
+  const builderEndRef = useRef(null);
+
   const goals = isTraining ? profile.trainingTargets : profile.restTargets;
 
   useEffect(() => {
@@ -42,6 +58,11 @@ export default function FuelTab() {
       setIsTraining(saved.isTraining);
     }
   }, []);
+
+  // Auto-scroll builder chat to bottom on new messages
+  useEffect(() => {
+    builderEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [builderChat]);
 
   const selectDayType = (training) => {
     setIsTraining(training);
@@ -79,7 +100,6 @@ export default function FuelTab() {
         256,
       );
       const parsed = parseJSONFromAI(raw);
-      // Read fresh from localStorage to avoid stale closure if another meal was added while awaiting
       const freshNutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
       const freshMeals = freshNutrition[todayStr()] || [];
       persistMeals([...freshMeals, { id: uid(), ...parsed }]);
@@ -125,6 +145,59 @@ export default function FuelTab() {
       setError(e.message);
     } finally {
       setRecLoading(false);
+    }
+  };
+
+  const sendBuilderMessage = async () => {
+    const input = builderInput.trim();
+    if (!input || builderLoading) return;
+    const apiKey = getApiKey();
+    if (!apiKey) { setError('Add your API key in Profile settings.'); return; }
+
+    const userMsg = { role: 'user', content: input };
+    const apiMessages = [...builderChat, userMsg];
+    setBuilderChat(apiMessages);
+    setBuilderInput('');
+    setBuilderLoading(true);
+
+    const system = `You are a precision nutrition coach helping the user plan a meal to hit their remaining macro targets for today.
+
+Remaining macros right now:
+- Calories: ${Math.round(remaining.calories)} kcal
+- Protein: ${Math.round(remaining.protein)}g
+- Carbs: ${Math.round(remaining.carbs)}g
+- Fat: ${Math.round(remaining.fat)}g
+
+For every response include:
+1. Exact gram amounts for each ingredient
+2. The macro breakdown of the full suggested meal (calories, protein, carbs, fat totals)
+3. What macros will remain after eating it
+
+Be specific and practical. For follow-up questions, adjust the previous recommendation and show updated numbers. Keep responses concise.`;
+
+    try {
+      let started = false;
+      await streamAIMessages(
+        apiKey,
+        system,
+        apiMessages,
+        text => {
+          if (!started) {
+            started = true;
+            setBuilderChat(prev => [...prev, { role: 'assistant', content: text }]);
+          } else {
+            setBuilderChat(prev => [
+              ...prev.slice(0, -1),
+              { role: 'assistant', content: text },
+            ]);
+          }
+        },
+        800,
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBuilderLoading(false);
     }
   };
 
@@ -244,6 +317,56 @@ export default function FuelTab() {
           )}
         </div>
       )}
+
+      {/* Meal Builder */}
+      <div className="card">
+        <h3>Meal Builder</h3>
+        <p className="field-hint">
+          Tell me what you have or what you're craving — I'll build a meal with exact gram amounts to hit your remaining macros.
+        </p>
+
+        {builderChat.length > 0 && (
+          <div className="builder-chat">
+            {builderChat.map((msg, i) => (
+              <div key={i} className={`builder-msg builder-msg--${msg.role}`}>
+                {msg.role === 'assistant'
+                  ? renderBuilderText(msg.content)
+                  : msg.content}
+              </div>
+            ))}
+            {builderLoading && builderChat[builderChat.length - 1]?.role === 'user' && (
+              <div className="builder-msg builder-msg--assistant builder-msg--loading">
+                Thinking...
+              </div>
+            )}
+            <div ref={builderEndRef} />
+          </div>
+        )}
+
+        <div className="builder-input-row">
+          <input
+            className="ai-food-input"
+            placeholder='e.g. "I have chicken and rice" or "what if I add peanut butter?"'
+            value={builderInput}
+            onChange={e => setBuilderInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendBuilderMessage()}
+            disabled={builderLoading}
+          />
+          <button
+            className="btn-primary"
+            onClick={sendBuilderMessage}
+            disabled={builderLoading || !builderInput.trim()}
+          >
+            {builderLoading ? '...' : 'Send'}
+          </button>
+        </div>
+
+        {builderChat.length > 0 && (
+          <button className="btn-ghost" style={{ marginTop: 6 }} onClick={() => setBuilderChat([])}>
+            Clear chat
+          </button>
+        )}
+      </div>
 
       {/* Manual add (collapsed) */}
       <div className="card">
