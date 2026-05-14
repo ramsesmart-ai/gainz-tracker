@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { uid, todayStr, getApiKey, callAI, parseJSONFromAI } from './utils';
+import { uid, todayStr, getApiKey, callAI, streamAI, parseJSONFromAI } from './utils';
 
 // ── Exercise lists per split ──────────────────────────────
 
@@ -115,12 +115,15 @@ const DRAFT_KEY = 'gainz_draft_workout';
 export default function TrainTab() {
   const [exercises, setExercises]         = useState([blankExercise()]);
   const [newName, setNewName]             = useState('');
+  const [notes, setNotes]                 = useState('');
   const [saved, setSaved]                 = useState(false);
   const [selectedSplit, setSelectedSplit] = useState(SPLITS[0]);
   const [loadingPlan, setLoadingPlan]     = useState(false);
   const [plan, setPlan]                   = useState(null);
   const [planError, setPlanError]         = useState('');
   const [draftReady, setDraftReady]       = useState(false);
+  const [coachTips, setCoachTips]         = useState({});
+  const lastCoachedKey                    = useRef({});
 
   // Restore from in-progress draft or today's saved workout on mount
   useEffect(() => {
@@ -130,11 +133,13 @@ export default function TrainTab() {
     if (draft?.date === todayStr() && draft.exercises?.some(e => e.name.trim())) {
       setExercises(draft.exercises);
       setSelectedSplit(draft.selectedSplit || SPLITS[0]);
+      if (draft.notes !== undefined) setNotes(draft.notes);
     } else {
       const today = workouts.find(w => w.date === todayStr());
       if (today?.exercises?.length) {
         setExercises(today.exercises);
         if (today.split) setSelectedSplit(today.split);
+        if (today.notes) setNotes(today.notes);
       } else {
         setSelectedSplit(suggestNextSplit(workouts));
       }
@@ -146,9 +151,9 @@ export default function TrainTab() {
   useEffect(() => {
     if (!draftReady) return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      date: todayStr(), exercises, selectedSplit,
+      date: todayStr(), exercises, selectedSplit, notes,
     }));
-  }, [exercises, selectedSplit, draftReady]);
+  }, [exercises, selectedSplit, notes, draftReady]);
 
   // ── Exercise state helpers
   const setEx = fn => setExercises(prev => fn(prev));
@@ -173,18 +178,65 @@ export default function TrainTab() {
     localStorage.setItem('gainz_workouts', JSON.stringify(existing.filter(w => w.date !== todayStr())));
     setExercises([blankExercise()]);
     setNewName('');
+    setNotes('');
+    setCoachTips({});
+    lastCoachedKey.current = {};
   };
 
   // ── Save workout
   const saveWorkout = () => {
     const valid = exercises.filter(e => e.name.trim() && e.sets.some(s => s.reps && s.weight));
     if (!valid.length) return;
-    const workout = { id: uid(), date: todayStr(), split: selectedSplit, exercises: valid };
+    const workout = { id: uid(), date: todayStr(), split: selectedSplit, notes: notes.trim(), exercises: valid };
     const existing = JSON.parse(localStorage.getItem('gainz_workouts') || '[]');
     localStorage.setItem('gainz_workouts', JSON.stringify([workout, ...existing.filter(w => w.date !== todayStr())]));
     localStorage.removeItem(DRAFT_KEY);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  };
+
+  // ── Real-time set coaching
+  const triggerSetCoaching = async (ex, set) => {
+    if (!ex.name.trim() || !set.weight || !set.reps) return;
+    const apiKey = getApiKey();
+    if (!apiKey) return;
+
+    const key = `${set.id}:${set.weight}:${set.reps}`;
+    if (lastCoachedKey.current[ex.id] === key) return;
+    lastCoachedKey.current[ex.id] = key;
+
+    setCoachTips(prev => ({ ...prev, [ex.id]: { loading: true, tip: '' } }));
+
+    try {
+      const pastWorkouts = JSON.parse(localStorage.getItem('gainz_workouts') || '[]')
+        .filter(w => w.date !== todayStr());
+      const history = pastWorkouts
+        .flatMap(w => w.exercises
+          .filter(e => e.name.toLowerCase() === ex.name.toLowerCase())
+          .map(e => ({ date: w.date, sets: e.sets })))
+        .slice(0, 5);
+
+      const todaySets = ex.sets
+        .map((s, i) => s.weight && s.reps ? `Set ${i + 1}: ${s.weight}lbs × ${s.reps}` : null)
+        .filter(Boolean)
+        .join('\n');
+
+      await streamAI(
+        apiKey,
+        `You are a gym coach giving real-time set coaching. Respond in 1-2 lines max. Be direct and specific — always include an exact weight recommendation for the next set. No greetings, no filler.`,
+        `Exercise: ${ex.name}
+Today's sets so far:
+${todaySets || 'none yet'}
+Just finished: ${set.weight}lbs × ${set.reps} reps
+${history.length ? `Recent history:\n${JSON.stringify(history)}` : 'No previous history for this exercise.'}
+
+Coaching rules: 3 warmup sets (lighter, higher rep to warm joints), then 3 working sets in the 6-8 rep range. If they hit 8 reps on a working set, increase weight next set. If they hit 6 or below, stay at same weight or drop slightly. What should they do next?`,
+        tip => setCoachTips(prev => ({ ...prev, [ex.id]: { loading: false, tip } })),
+        120,
+      );
+    } catch {
+      setCoachTips(prev => ({ ...prev, [ex.id]: { loading: false, tip: '' } }));
+    }
   };
 
   // ── AI workout plan
@@ -325,14 +377,25 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
               <div key={set.id} className="sets-row">
                 <span className="set-num">{i + 1}</span>
                 <input type="number" step="any" className="set-input" placeholder="0"
-                  value={set.weight} onChange={e => updateSet(ex.id, set.id, 'weight', e.target.value)} />
+                  value={set.weight}
+                  onChange={e => updateSet(ex.id, set.id, 'weight', e.target.value)}
+                  onBlur={() => triggerSetCoaching(ex, set)} />
                 <input type="number" className="set-input" placeholder="0"
-                  value={set.reps} onChange={e => updateSet(ex.id, set.id, 'reps', e.target.value)} />
+                  value={set.reps}
+                  onChange={e => updateSet(ex.id, set.id, 'reps', e.target.value)}
+                  onBlur={() => triggerSetCoaching(ex, set)} />
                 <button className="icon-btn" onClick={() => removeSet(ex.id, set.id)}>×</button>
               </div>
             ))}
           </div>
+
           <button className="add-set-btn" onClick={() => addSet(ex.id)}>+ Add Set</button>
+
+          {(coachTips[ex.id]?.loading || coachTips[ex.id]?.tip) && (
+            <div className={`set-coach-tip${coachTips[ex.id]?.loading ? ' loading' : ''}`}>
+              {coachTips[ex.id]?.loading ? 'Analyzing...' : coachTips[ex.id].tip}
+            </div>
+          )}
         </div>
       ))}
 
@@ -353,6 +416,14 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
           Total Volume: <strong>{totalVolume.toLocaleString()} lbs</strong>
         </div>
       )}
+
+      <textarea
+        className="session-notes"
+        placeholder="Session notes — how'd it feel, any injuries, targets for next time..."
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        rows={3}
+      />
 
       <div className="workout-actions">
         <button className={`btn-primary${saved ? ' saved' : ''}`} onClick={saveWorkout}>

@@ -133,6 +133,7 @@ ${JSON.stringify(workouts.slice(0, 10), null, 2)}`,
               </div>
               {expanded === w.id && (
                 <div className="history-body">
+                  {w.notes && <p className="workout-notes">{w.notes}</p>}
                   {w.exercises.map(ex => (
                     <div key={ex.id} className="history-ex">
                       <div className="history-ex-header">
