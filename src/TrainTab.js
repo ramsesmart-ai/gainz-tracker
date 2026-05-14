@@ -54,8 +54,8 @@ function suggestNextSplit(workouts) {
 
 // ── Blank helpers ─────────────────────────────────────────
 
-const blankSet = () => ({ id: uid(), reps: '', weight: '' });
-const blankExercise = (name = '') => ({ id: uid(), name, sets: [blankSet()] });
+const blankSet = (type = 'working') => ({ id: uid(), reps: '', weight: '', type });
+const blankExercise = (name = '') => ({ id: uid(), name, sets: [blankSet('warmup')] });
 
 // ── Custom exercise autocomplete — works on mobile ────────
 
@@ -159,10 +159,13 @@ export default function TrainTab() {
   const setEx = fn => setExercises(prev => fn(prev));
   const removeExercise = id         => setEx(prev => prev.filter(e => e.id !== id));
   const updateExName   = (id, name) => setEx(prev => prev.map(e => e.id === id ? { ...e, name } : e));
-  const addSet         = id         => setEx(prev => prev.map(e => e.id === id ? { ...e, sets: [...e.sets, blankSet()] } : e));
+  const addSet         = id         => setEx(prev => prev.map(e => e.id === id ? { ...e, sets: [...e.sets, blankSet('working')] } : e));
   const removeSet      = (eid, sid) => setEx(prev => prev.map(e => e.id === eid ? { ...e, sets: e.sets.filter(s => s.id !== sid) } : e));
   const updateSet      = (eid, sid, field, val) => setEx(prev =>
     prev.map(e => e.id === eid ? { ...e, sets: e.sets.map(s => s.id === sid ? { ...s, [field]: val } : s) } : e)
+  );
+  const toggleSetType  = (eid, sid) => setEx(prev =>
+    prev.map(e => e.id === eid ? { ...e, sets: e.sets.map(s => s.id === sid ? { ...s, type: s.type === 'warmup' ? 'working' : 'warmup' } : s) } : e)
   );
   const addExercise = () => {
     if (!newName.trim()) return;
@@ -201,7 +204,7 @@ export default function TrainTab() {
     const apiKey = getApiKey();
     if (!apiKey) return;
 
-    const key = `${set.id}:${set.weight}:${set.reps}`;
+    const key = `${set.id}:${set.weight}:${set.reps}:${set.type || 'working'}`;
     if (lastCoachedKey.current[ex.id] === key) return;
     lastCoachedKey.current[ex.id] = key;
 
@@ -217,9 +220,15 @@ export default function TrainTab() {
         .slice(0, 5);
 
       const todaySets = ex.sets
-        .map((s, i) => s.weight && s.reps ? `Set ${i + 1}: ${s.weight}lbs × ${s.reps}` : null)
+        .map((s, i) => {
+          if (!s.weight || !s.reps) return null;
+          const label = s.type === 'warmup' ? 'Warmup' : 'Working';
+          return `Set ${i + 1} [${label}]: ${s.weight}lbs × ${s.reps}`;
+        })
         .filter(Boolean)
         .join('\n');
+
+      const currentType = set.type === 'warmup' ? 'Warmup' : 'Working';
 
       await streamAI(
         apiKey,
@@ -227,10 +236,10 @@ export default function TrainTab() {
         `Exercise: ${ex.name}
 Today's sets so far:
 ${todaySets || 'none yet'}
-Just finished: ${set.weight}lbs × ${set.reps} reps
+Just finished: ${set.weight}lbs × ${set.reps} reps [${currentType}]
 ${history.length ? `Recent history:\n${JSON.stringify(history)}` : 'No previous history for this exercise.'}
 
-Coaching rules: 3 warmup sets (lighter, higher rep to warm joints), then 3 working sets in the 6-8 rep range. If they hit 8 reps on a working set, increase weight next set. If they hit 6 or below, stay at same weight or drop slightly. What should they do next?`,
+Rules: Warmup sets are lighter/higher rep to prepare joints — ignore them for progression decisions. Working sets target 6-8 reps near failure. Base ALL progression on working sets only: hit 8 reps → increase weight next working set; hit 6 or below → stay or drop slightly. What should they do next?`,
         tip => setCoachTips(prev => ({ ...prev, [ex.id]: { loading: false, tip } })),
         120,
       );
@@ -371,22 +380,31 @@ Include 3 exercises appropriate for ${selectedSplit} with warmup and working set
 
           <div className="sets-table">
             <div className="sets-row header-row">
-              <span>SET</span><span>WEIGHT (lbs)</span><span>REPS</span><span />
+              <span>SET</span><span>WEIGHT (lbs)</span><span>REPS</span><span>TYPE</span><span />
             </div>
-            {ex.sets.map((set, i) => (
-              <div key={set.id} className="sets-row">
-                <span className="set-num">{i + 1}</span>
-                <input type="number" step="any" className="set-input" placeholder="0"
-                  value={set.weight}
-                  onChange={e => updateSet(ex.id, set.id, 'weight', e.target.value)}
-                  onBlur={() => triggerSetCoaching(ex, set)} />
-                <input type="number" className="set-input" placeholder="0"
-                  value={set.reps}
-                  onChange={e => updateSet(ex.id, set.id, 'reps', e.target.value)}
-                  onBlur={() => triggerSetCoaching(ex, set)} />
-                <button className="icon-btn" onClick={() => removeSet(ex.id, set.id)}>×</button>
-              </div>
-            ))}
+            {ex.sets.map((set, i) => {
+              const isWarmup = (set.type ?? 'working') === 'warmup';
+              return (
+                <div key={set.id} className="sets-row">
+                  <span className="set-num">{i + 1}</span>
+                  <input type="number" step="any" className="set-input" placeholder="0"
+                    value={set.weight}
+                    onChange={e => updateSet(ex.id, set.id, 'weight', e.target.value)}
+                    onBlur={() => triggerSetCoaching(ex, set)} />
+                  <input type="number" className="set-input" placeholder="0"
+                    value={set.reps}
+                    onChange={e => updateSet(ex.id, set.id, 'reps', e.target.value)}
+                    onBlur={() => triggerSetCoaching(ex, set)} />
+                  <button
+                    className={`set-type-btn${isWarmup ? ' warmup' : ' working'}`}
+                    onClick={() => toggleSetType(ex.id, set.id)}
+                  >
+                    {isWarmup ? 'WU' : 'WK'}
+                  </button>
+                  <button className="icon-btn" onClick={() => removeSet(ex.id, set.id)}>×</button>
+                </div>
+              );
+            })}
           </div>
 
           <button className="add-set-btn" onClick={() => addSet(ex.id)}>+ Add Set</button>

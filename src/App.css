@@ -252,7 +252,7 @@ body {
 
 .sets-row {
   display: grid;
-  grid-template-columns: 36px 1fr 1fr 32px;
+  grid-template-columns: 36px 1fr 1fr 42px 32px;
   gap: 10px;
   align-items: center;
 }
@@ -297,6 +297,33 @@ body {
 .set-input:focus { border-color: var(--border-2); }
 .set-input::-webkit-outer-spin-button,
 .set-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.set-type-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 6px 0;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  user-select: none;
+}
+
+.set-type-btn.warmup {
+  color: var(--text-2);
+  border-color: var(--border-2);
+}
+
+.set-type-btn.working {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.3);
+  color: var(--text);
+}
 
 .add-set-btn {
   background: none;
