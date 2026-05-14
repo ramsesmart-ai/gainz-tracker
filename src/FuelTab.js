@@ -36,7 +36,17 @@ export default function FuelTab() {
   useEffect(() => {
     const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
     setMeals(nutrition[todayStr()] || []);
+
+    const saved = JSON.parse(localStorage.getItem('gainz_day_type') || 'null');
+    if (saved?.date === todayStr()) {
+      setIsTraining(saved.isTraining);
+    }
   }, []);
+
+  const selectDayType = (training) => {
+    setIsTraining(training);
+    localStorage.setItem('gainz_day_type', JSON.stringify({ date: todayStr(), isTraining: training }));
+  };
 
   const persistMeals = updated => {
     const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
@@ -135,13 +145,13 @@ export default function FuelTab() {
         <div className="day-toggle">
           <button
             className={`day-btn${isTraining ? ' active' : ''}`}
-            onClick={() => setIsTraining(true)}
+            onClick={() => selectDayType(true)}
           >
             Training Day
           </button>
           <button
             className={`day-btn${!isTraining ? ' active' : ''}`}
-            onClick={() => setIsTraining(false)}
+            onClick={() => selectDayType(false)}
           >
             Rest Day
           </button>
