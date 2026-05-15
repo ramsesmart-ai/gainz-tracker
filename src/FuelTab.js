@@ -1,6 +1,7 @@
 // v2.1
 import { useState, useEffect, useRef } from 'react';
 import { uid, todayStr, getProfile, getApiKey, callAI, streamAI, streamAIMessages, parseJSONFromAI } from './utils';
+import { pushActiveDay, pushNutritionDay, pushBuilderChat } from './db';
 
 const macrosCal = ({ protein = 0, carbs = 0, fat = 0 }) =>
   (parseFloat(protein) || 0) * 4 + (parseFloat(carbs) || 0) * 4 + (parseFloat(fat) || 0) * 9;
@@ -143,9 +144,10 @@ export default function FuelTab() {
     setHistoryData(computeHistory(getProfile()));
   }, []);
 
-  // Save chat to localStorage + auto-scroll on every chat update
+  // Save chat to localStorage + Supabase + auto-scroll on every chat update
   useEffect(() => {
     localStorage.setItem('gainz_builder_chat', JSON.stringify(builderChat));
+    pushBuilderChat(builderChat);
     builderEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [builderChat]);
 
@@ -154,6 +156,7 @@ export default function FuelTab() {
     const active = JSON.parse(localStorage.getItem('gainz_active_day') || '{}');
     active.isTraining = training;
     localStorage.setItem('gainz_active_day', JSON.stringify(active));
+    pushActiveDay(active);
   };
 
   const persistMeals = updated => {
@@ -161,6 +164,7 @@ export default function FuelTab() {
     active.meals = updated;
     localStorage.setItem('gainz_active_day', JSON.stringify(active));
     setMeals(updated);
+    pushActiveDay(active);
   };
 
   const removeMeal = id => persistMeals(meals.filter(m => m.id !== id));
@@ -200,10 +204,13 @@ export default function FuelTab() {
       const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
       nutrition[active.date] = { meals: active.meals, isTraining: !!active.isTraining };
       localStorage.setItem('gainz_nutrition', JSON.stringify(nutrition));
+      pushNutritionDay(active.date, active.meals, !!active.isTraining);
     }
     const today = todayStr();
     const isTrainingDay = isTodayTrainingDay();
-    localStorage.setItem('gainz_active_day', JSON.stringify({ date: today, meals: [], isTraining: isTrainingDay }));
+    const newActive = { date: today, meals: [], isTraining: isTrainingDay };
+    localStorage.setItem('gainz_active_day', JSON.stringify(newActive));
+    pushActiveDay(newActive);
     setMeals([]);
     setIsTraining(isTrainingDay);
     setActiveDayDate(today);

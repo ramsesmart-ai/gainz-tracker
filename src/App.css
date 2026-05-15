@@ -115,6 +115,23 @@ body {
 .tab-btn:hover:not(.active) { color: rgba(255,255,255,0.5); }
 .tab-btn.active { color: var(--text); border-bottom-color: var(--text); }
 
+/* ── DB loading screen ─────────────────────────────────── */
+.db-loading {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg);
+}
+
+.db-loading-text {
+  font-size: 14px;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+
 /* ── Scroll container ──────────────────────────────────── */
 .tab-content {
   flex: 1;

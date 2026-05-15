@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getProfile, saveProfile, getApiKey } from './utils';
+import { pushProfile } from './db';
 
 const PHASES = ['cut', 'maintain', 'refeed', 'bulk'];
 const MACRO_FIELDS = [
@@ -20,6 +21,7 @@ export default function ProfileModal({ onClose }) {
   const save = () => {
     saveProfile(profile);
     localStorage.setItem('gainz_api_key', apiKey.trim());
+    pushProfile(profile, apiKey.trim());
     onClose();
   };
 
@@ -106,7 +108,7 @@ export default function ProfileModal({ onClose }) {
               onChange={e => setApiKey(e.target.value)}
             />
             <p className="modal-helper">
-              Used for AI food estimation, workout planning, and coaching. Stored locally only — never sent anywhere else.
+              Used for AI food estimation, workout planning, and coaching. Synced to your Kova account — never shared.
             </p>
           </div>
 

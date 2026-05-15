@@ -5,12 +5,14 @@ import FuelTab from './FuelTab';
 import BodyTab from './BodyTab';
 import GainsTab from './GainsTab';
 import ProfileModal from './ProfileModal';
+import { pullAll } from './db';
 
 const TABS = ['Train', 'Fuel', 'Body', 'Gains'];
 
 export default function App() {
   const [tabIndex, setTabIndex]       = useState(0);
   const [showProfile, setShowProfile] = useState(false);
+  const [dbReady, setDbReady]         = useState(false);
 
   const sliderRef      = useRef(null);
   const touchStartX    = useRef(0);
@@ -18,6 +20,14 @@ export default function App() {
   const lockedVertical = useRef(false);
   const dragging       = useRef(false);
   const tabIndexRef    = useRef(0);
+
+  // Pull from Supabase on first load, then mount the app
+  useEffect(() => {
+    const timeout = new Promise(res => setTimeout(res, 5000)); // 5s offline fallback
+    Promise.race([pullAll(), timeout])
+      .catch(() => {})
+      .finally(() => setDbReady(true));
+  }, []);
 
   // Keep ref in sync so touch handlers always see the current tab index
   useEffect(() => { tabIndexRef.current = tabIndex; }, [tabIndex]);
@@ -97,6 +107,21 @@ export default function App() {
       el.removeEventListener('touchend',   onTouchEnd);
     };
   }, []);
+
+  if (!dbReady) {
+    return (
+      <div className="db-loading">
+        <svg width="40" height="40" viewBox="0 0 30 30" fill="none">
+          <rect width="30" height="30" rx="8" fill="#141414" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
+          <line x1="8.5" y1="5"  x2="8.5"  y2="25"  stroke="white" strokeWidth="3"   strokeLinecap="round"/>
+          <line x1="9.5" y1="14" x2="22"   y2="5"   stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9.5" y1="18" x2="13.5" y2="13"  stroke="white" strokeWidth="2"   strokeLinecap="round"/>
+          <line x1="13.5" y1="18" x2="22"  y2="25"  stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
+        <span className="db-loading-text">Syncing...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="app">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { uid, todayStr, getProfile } from './utils';
+import { pushBodyWeight, deleteSupabaseBodyWeight } from './db';
 
 // ── Math helpers ─────────────────────────────────────────
 
@@ -232,10 +233,12 @@ export default function BodyTab() {
     const w = parseFloat(todayVal);
     if (!w) return;
     const existing = entries.filter(e => e.date !== todayStr());
-    const updated = [{ id: uid(), date: todayStr(), weight: w }, ...existing];
+    const entry = { id: uid(), date: todayStr(), weight: w };
+    const updated = [entry, ...existing];
     localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
     setEntries(updated);
     setLoggedToday(true);
+    pushBodyWeight(entry);
   };
 
   const deleteEntry = date => {
@@ -244,6 +247,7 @@ export default function BodyTab() {
     setEntries(updated);
     if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
     if (date === editingDate) setEditingDate(null);
+    deleteSupabaseBodyWeight(date);
   };
 
   const startEdit = entry => {
@@ -258,6 +262,8 @@ export default function BodyTab() {
     localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
     setEntries(updated);
     if (editingDate === todayStr()) setTodayVal(String(w));
+    const edited = updated.find(e => e.date === editingDate);
+    if (edited) pushBodyWeight(edited);
     setEditingDate(null);
   };
 

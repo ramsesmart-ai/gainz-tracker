@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getApiKey, streamAI } from './utils';
+import { pushWorkout, deleteSupabaseWorkout } from './db';
 
 function renderMarkdown(text) {
   return text.split('\n').map((line, i) => {
@@ -44,6 +45,7 @@ export default function GainsTab() {
   const deleteWorkout = id => {
     if (expanded === id) setExpanded(null);
     persistWorkouts(workouts.filter(w => w.id !== id));
+    deleteSupabaseWorkout(id);
   };
 
   const deleteExercise = (wid, eid) => {
@@ -55,6 +57,9 @@ export default function GainsTab() {
     }, []);
     if (!updated.find(w => w.id === wid)) setExpanded(null);
     persistWorkouts(updated);
+    const modified = updated.find(w => w.id === wid);
+    if (modified) pushWorkout(modified);
+    else deleteSupabaseWorkout(wid);
   };
 
   const getCoachTips = async () => {

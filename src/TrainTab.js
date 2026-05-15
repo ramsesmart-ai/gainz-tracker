@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { uid, todayStr, getApiKey, callAI, streamAI, parseJSONFromAI } from './utils';
+import { pushWorkout, deleteWorkoutsByDate } from './db';
 
 // ── Exercise lists per split ──────────────────────────────
 
@@ -184,6 +185,7 @@ export default function TrainTab() {
     setNotes('');
     setCoachTips({});
     lastCoachedKey.current = {};
+    deleteWorkoutsByDate(todayStr());
   };
 
   // ── Save workout
@@ -196,6 +198,7 @@ export default function TrainTab() {
     localStorage.removeItem(DRAFT_KEY);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+    pushWorkout(workout);
   };
 
   // ── Real-time set coaching
