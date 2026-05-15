@@ -221,6 +221,7 @@ export default function BodyTab() {
   const [loggedToday, setLoggedToday] = useState(false);
   const [editingDate, setEditingDate] = useState(null);
   const [editVal, setEditVal]       = useState('');
+  const [errorMsg, setErrorMsg]     = useState(null);
   const profile = getProfile();
 
   useEffect(() => {
@@ -264,6 +265,7 @@ export default function BodyTab() {
       deleteSupabaseBodyWeight(date);
     } catch (err) {
       console.error('[BodyTab] deleteEntry failed:', err);
+      setErrorMsg(`deleteEntry: ${err?.message || String(err)}`);
     }
   };
 
@@ -312,6 +314,21 @@ export default function BodyTab() {
         <h2>Body</h2>
         <span className="date-badge">{dateLabel}</span>
       </div>
+
+      {errorMsg && (
+        <div style={{
+          background: '#7f1d1d', color: '#fca5a5', border: '1px solid #dc2626',
+          borderRadius: 8, padding: '12px 14px', margin: '0 0 12px',
+          fontSize: 13, fontFamily: 'monospace', wordBreak: 'break-all',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8,
+        }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg(null)}
+            style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+          >×</button>
+        </div>
+      )}
 
       {/* Log today */}
       <div className="card">
