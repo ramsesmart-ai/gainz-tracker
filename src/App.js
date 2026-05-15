@@ -101,8 +101,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="logo-chip">GZ</span>
-        <h1 className="app-title">GAINZ TRACKER</h1>
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none" className="logo-chip" xmlns="http://www.w3.org/2000/svg">
+          <rect width="30" height="30" rx="8" fill="#0e0e0e" stroke="rgba(255,255,255,0.18)" strokeWidth="1"/>
+          <line x1="8.5" y1="5"  x2="8.5" y2="25" stroke="white" strokeWidth="3"   strokeLinecap="round"/>
+          <line x1="9.5" y1="14" x2="22"  y2="5"  stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="9.5" y1="18" x2="13.5" y2="13" stroke="white" strokeWidth="2"  strokeLinecap="round"/>
+          <line x1="13.5" y1="18" x2="22" y2="25"  stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
+        <h1 className="app-title">KOVA TRACKER</h1>
         <button className="btn-profile" onClick={() => setShowProfile(true)}>Profile</button>
       </header>
 
