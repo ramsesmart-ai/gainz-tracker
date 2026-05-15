@@ -5,6 +5,7 @@ import FuelTab from './FuelTab';
 import BodyTab from './BodyTab';
 import GainsTab from './GainsTab';
 import ProfileModal from './ProfileModal';
+import ErrorBoundary from './ErrorBoundary';
 import { pullAll } from './db';
 
 const TABS = ['Train', 'Fuel', 'Body', 'Gains'];
@@ -153,7 +154,7 @@ export default function App() {
         <div className="tab-slider" ref={sliderRef}>
           <div className="tab-slide"><TrainTab /></div>
           <div className="tab-slide"><FuelTab /></div>
-          <div className="tab-slide"><BodyTab /></div>
+          <div className="tab-slide"><ErrorBoundary><BodyTab /></ErrorBoundary></div>
           <div className="tab-slide"><GainsTab /></div>
         </div>
       </main>

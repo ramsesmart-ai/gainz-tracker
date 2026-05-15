@@ -225,7 +225,8 @@ export default function BodyTab() {
 
   useEffect(() => {
     const raw = JSON.parse(localStorage.getItem('gainz_bodyweight') || '[]');
-    const sorted = raw.sort((a, b) => b.date.localeCompare(a.date));
+    const valid = raw.filter(e => e && e.date && e.weight != null);
+    const sorted = valid.sort((a, b) => b.date.localeCompare(a.date));
     setEntries(sorted);
     const todayEntry = sorted.find(e => e.date === todayStr());
     if (todayEntry) { setTodayVal(String(todayEntry.weight)); setLoggedToday(true); }
@@ -244,7 +245,7 @@ export default function BodyTab() {
   };
 
   const deleteEntry = (id, date) => {
-    const updated = entries.filter(e => e.id !== id);
+    const updated = entries.filter(e => e && e.id !== id);
     localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
     setEntries(updated);
     if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
