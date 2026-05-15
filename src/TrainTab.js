@@ -199,6 +199,7 @@ export default function TrainTab() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
     pushWorkout(workout);
+    window.dispatchEvent(new CustomEvent('gainz:workouts-updated'));
   };
 
   // ── Real-time set coaching

@@ -19,7 +19,8 @@ function linReg(pts) {
 }
 
 function weekOf(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
+  const d = new Date((dateStr || '') + 'T12:00:00');
+  if (isNaN(d.getTime())) return '1970-01-01';
   const sun = new Date(d);
   sun.setDate(d.getDate() - d.getDay());
   return sun.toISOString().slice(0, 10);
@@ -36,6 +37,7 @@ function localDateStr(d) {
 function getWeeklyAverages(entries) {
   const map = {};
   entries.forEach(e => {
+    if (!e || !e.date) return;
     const w = weekOf(e.date);
     if (!map[w]) map[w] = [];
     map[w].push(e.weight);
@@ -241,8 +243,8 @@ export default function BodyTab() {
     pushBodyWeight(entry);
   };
 
-  const deleteEntry = date => {
-    const updated = entries.filter(e => e.date !== date);
+  const deleteEntry = (id, date) => {
+    const updated = entries.filter(e => e.id !== id);
     localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
     setEntries(updated);
     if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
@@ -408,7 +410,7 @@ export default function BodyTab() {
                   ) : (
                     <button className="icon-btn" onClick={() => startEdit(e)}>✎</button>
                   )}
-                  <button className="icon-btn danger" onClick={() => deleteEntry(e.date)}>×</button>
+                  <button className="icon-btn danger" onClick={() => deleteEntry(e.id, e.date)}>×</button>
                 </div>
               ))}
             </div>

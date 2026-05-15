@@ -20,7 +20,10 @@ export default function GainsTab() {
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
-    setWorkouts(JSON.parse(localStorage.getItem('gainz_workouts') || '[]'));
+    const load = () => setWorkouts(JSON.parse(localStorage.getItem('gainz_workouts') || '[]'));
+    load();
+    window.addEventListener('gainz:workouts-updated', load);
+    return () => window.removeEventListener('gainz:workouts-updated', load);
   }, []);
 
   const prs = workouts.reduce((acc, workout) => {
