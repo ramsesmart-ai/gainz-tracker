@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { uid, todayStr, getProfile } from './utils';
 import { pushBodyWeight, deleteSupabaseBodyWeight } from './db';
 
@@ -222,6 +222,7 @@ export default function BodyTab() {
   const [editingDate, setEditingDate] = useState(null);
   const [editVal, setEditVal]       = useState('');
   const profile = getProfile();
+  const todayCardRef = useRef(null);
 
   useEffect(() => {
     const raw = JSON.parse(localStorage.getItem('gainz_bodyweight') || '[]');
@@ -249,7 +250,11 @@ export default function BodyTab() {
       const updated = entries.filter(e => e && e.id !== id);
       setEntries(updated);
       localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
-      if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
+      if (date === todayStr()) {
+        setTodayVal('');
+        setLoggedToday(false);
+        todayCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       if (date === editingDate) setEditingDate(null);
       deleteSupabaseBodyWeight(date);
     } catch (err) {
@@ -301,7 +306,7 @@ export default function BodyTab() {
       </div>
 
       {/* Log today */}
-      <div className="card">
+      <div className="card" ref={todayCardRef}>
         <h3>Today's Weight</h3>
         <div className="weight-entry-row">
           <div className="weight-input-group">
