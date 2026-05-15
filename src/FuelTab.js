@@ -76,6 +76,25 @@ Use these accurate cooked/prepared values per 100g unless the user specifies oth
 
 For branded products (e.g. "Oikos Triple Zero", "Nature Valley bar", "Fairlife milk", "Quest bar", "Premier Protein shake"), use the official nutrition label values for that specific product. Scale all values to the exact quantity the user described.`;
 
+function builderSystem(remaining) {
+  return `You are a nutrition coach helping the user plan a meal around their remaining daily macro targets.
+
+Remaining macros for today:
+Calories: ${Math.round(remaining.calories)} kcal, Protein: ${Math.round(remaining.protein)}g, Carbs: ${Math.round(remaining.carbs)}g, Fat: ${Math.round(remaining.fat)}g
+
+Before suggesting a meal, ask what type it is if the user hasn't said: breakfast, pre-workout, post-workout, work meal, or snack. Then size it for that type — do not try to fill all remaining macros at once:
+
+Pre-workout: small, 15-20% of remaining calories. Fast-digesting carbs like fruit, bread, honey, or rice cakes. Keep fat very low so digestion is fast.
+Post-workout: 25-35% of remaining calories. Prioritize protein and carbs together — chicken and rice, Greek yogurt with fruit, etc.
+Breakfast: 25-30% of remaining calories, balanced across macros.
+Work meal or lunch: 30-40% of remaining calories, bigger and complete.
+Snack: small, 10-15% of remaining calories.
+
+Always give exact gram amounts for each ingredient. Show the macro totals for the meal you suggest and note what will remain after eating it.
+
+Write in plain conversational text. No markdown headers (##), bullet dashes (-), or tables. You may bold (**like this**) food names and key numbers. Keep it short — 4-6 sentences max per response.`;
+}
+
 export default function FuelTab() {
   const profile = getProfile();
 
@@ -92,9 +111,15 @@ export default function FuelTab() {
   const [historyData, setHistoryData]     = useState([]);
 
   const [builderInput, setBuilderInput]       = useState('');
-  const [builderChat, setBuilderChat]         = useState([]);
   const [builderLoading, setBuilderLoading]   = useState(false);
+  const [logMealLoading, setLogMealLoading]   = useState(false);
   const builderEndRef = useRef(null);
+
+  // Persisted across sessions — lazy init from localStorage
+  const [builderChat, setBuilderChat] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gainz_builder_chat') || '[]'); }
+    catch { return []; }
+  });
 
   const goals = isTraining ? profile.trainingTargets : profile.restTargets;
 
@@ -105,7 +130,6 @@ export default function FuelTab() {
       setIsTraining(active.isTraining ?? isTodayTrainingDay());
       setActiveDayDate(active.date || todayStr());
     } else {
-      // First launch — migrate any existing today's data from old format
       const today = todayStr();
       const nutrition = JSON.parse(localStorage.getItem('gainz_nutrition') || '{}');
       const todayMeals = nutrition[today] || [];
@@ -119,7 +143,9 @@ export default function FuelTab() {
     setHistoryData(computeHistory(getProfile()));
   }, []);
 
+  // Save chat to localStorage + auto-scroll on every chat update
   useEffect(() => {
+    localStorage.setItem('gainz_builder_chat', JSON.stringify(builderChat));
     builderEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [builderChat]);
 
@@ -183,6 +209,7 @@ export default function FuelTab() {
     setActiveDayDate(today);
     setRec('');
     setBuilderChat([]);
+    localStorage.removeItem('gainz_builder_chat');
     setHistoryData(computeHistory(getProfile()));
   };
 
@@ -235,26 +262,11 @@ export default function FuelTab() {
     setBuilderInput('');
     setBuilderLoading(true);
 
-    const system = `You are a precision nutrition coach helping the user plan a meal to hit their remaining macro targets for today.
-
-Remaining macros right now:
-- Calories: ${Math.round(remaining.calories)} kcal
-- Protein: ${Math.round(remaining.protein)}g
-- Carbs: ${Math.round(remaining.carbs)}g
-- Fat: ${Math.round(remaining.fat)}g
-
-For every response include:
-1. Exact gram amounts for each ingredient
-2. The macro breakdown of the full suggested meal (calories, protein, carbs, fat totals)
-3. What macros will remain after eating it
-
-Be specific and practical. For follow-up questions, adjust the previous recommendation and show updated numbers. Keep responses concise.`;
-
     try {
       let started = false;
       await streamAIMessages(
         apiKey,
-        system,
+        builderSystem(remaining),
         apiMessages,
         text => {
           if (!started) {
@@ -275,6 +287,37 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
       setBuilderLoading(false);
     }
   };
+
+  const logBuilderMeal = async () => {
+    const lastAssistant = [...builderChat].reverse().find(m => m.role === 'assistant');
+    if (!lastAssistant) return;
+    const apiKey = getApiKey();
+    if (!apiKey) { setError('Add your API key in Profile settings.'); return; }
+    setLogMealLoading(true); setError('');
+    try {
+      const raw = await callAI(
+        apiKey,
+        'Extract the meal information from the nutrition coach response below. Return ONLY valid JSON with these fields: name (string, short meal name), protein (number, grams), carbs (number, grams), fat (number, grams), calories (number). Sum all ingredients into totals. No markdown, just the JSON.',
+        lastAssistant.content,
+        200,
+      );
+      const parsed = parseJSONFromAI(raw);
+      const freshActive = JSON.parse(localStorage.getItem('gainz_active_day') || '{}');
+      persistMeals([...(freshActive.meals || []), { id: uid(), ...parsed }]);
+    } catch (e) {
+      setError('Could not log meal: ' + e.message);
+    } finally {
+      setLogMealLoading(false);
+    }
+  };
+
+  const clearBuilderChat = () => {
+    setBuilderChat([]);
+    localStorage.removeItem('gainz_builder_chat');
+  };
+
+  const lastMsgIsAssistant = !builderLoading && builderChat.length > 0 &&
+    builderChat[builderChat.length - 1]?.role === 'assistant';
 
   const autoCalPreview = macrosCal(form);
   const dateLabel = new Date(activeDayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -400,7 +443,7 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
       <div className="card">
         <h3>Meal Builder</h3>
         <p className="field-hint">
-          Tell me what you have or what you're craving — I'll build a meal with exact gram amounts to hit your remaining macros.
+          Tell me what you have or what you're craving — I'll build a meal sized for the moment.
         </p>
 
         {builderChat.length > 0 && (
@@ -421,10 +464,16 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
           </div>
         )}
 
+        {lastMsgIsAssistant && (
+          <button className="btn-log-meal" onClick={logBuilderMeal} disabled={logMealLoading}>
+            {logMealLoading ? 'Adding to log...' : '+ Log this meal'}
+          </button>
+        )}
+
         <div className="builder-input-row">
           <input
             className="ai-food-input"
-            placeholder='e.g. "I have chicken and rice" or "what if I add peanut butter?"'
+            placeholder='e.g. "I have chicken and rice" or "something quick pre-workout"'
             value={builderInput}
             onChange={e => setBuilderInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && sendBuilderMessage()}
@@ -440,7 +489,7 @@ Be specific and practical. For follow-up questions, adjust the previous recommen
         </div>
 
         {builderChat.length > 0 && (
-          <button className="btn-ghost" style={{ marginTop: 6 }} onClick={() => setBuilderChat([])}>
+          <button className="btn-ghost" style={{ marginTop: 6 }} onClick={clearBuilderChat}>
             Clear chat
           </button>
         )}

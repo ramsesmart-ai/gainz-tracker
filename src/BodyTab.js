@@ -28,6 +28,10 @@ function fmtDate(dateStr) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getWeeklyAverages(entries) {
   const map = {};
   entries.forEach(e => {
@@ -44,7 +48,97 @@ function getWeeklyAverages(entries) {
     }));
 }
 
-// ── SVG Chart ────────────────────────────────────────────
+// ── Last 7 Days Chart ────────────────────────────────────
+
+function Last7DaysChart({ entries }) {
+  const today = new Date();
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (6 - i));
+    const dateStr = localDateStr(d);
+    const entry = entries.find(e => e.date === dateStr);
+    return {
+      dateStr,
+      weight: entry ? entry.weight : null,
+      label: d.toLocaleDateString('en-US', { weekday: 'short' }),
+    };
+  });
+
+  const logged = days.filter(d => d.weight !== null);
+  if (logged.length === 0) {
+    return <p className="chart-empty">No weigh-ins in the last 7 days.</p>;
+  }
+
+  const W = 700, H = 180;
+  const PAD = { t: 28, r: 16, b: 36, l: 52 };
+  const cW = W - PAD.l - PAD.r;
+  const cH = H - PAD.t - PAD.b;
+
+  const weights = logged.map(d => d.weight);
+  const lo = Math.min(...weights);
+  const hi = Math.max(...weights);
+  const spread = hi - lo || 2;
+  const yLo = lo - spread * 0.5;
+  const yHi = hi + spread * 0.5;
+
+  const xAt = i => PAD.l + (i / 6) * cW;
+  const yAt = w => PAD.t + (1 - (w - yLo) / (yHi - yLo)) * cH;
+
+  // Build line segments (skip days with no data)
+  const segments = [];
+  let seg = [];
+  days.forEach((d, i) => {
+    if (d.weight !== null) {
+      seg.push({ x: xAt(i), y: yAt(d.weight), weight: d.weight });
+    } else if (seg.length > 0) {
+      segments.push(seg);
+      seg = [];
+    }
+  });
+  if (seg.length > 0) segments.push(seg);
+
+  const yTicks = [yLo + (yHi - yLo) * 0.15, (yLo + yHi) / 2, yHi - (yHi - yLo) * 0.15];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {yTicks.map((w, i) => (
+        <g key={i}>
+          <line x1={PAD.l} y1={yAt(w)} x2={W - PAD.r} y2={yAt(w)}
+            stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+          <text x={PAD.l - 8} y={yAt(w) + 4} textAnchor="end"
+            fontSize="11" fill="rgba(255,255,255,0.3)" fontFamily="Inter, sans-serif">
+            {w.toFixed(1)}
+          </text>
+        </g>
+      ))}
+      {days.map((d, i) => (
+        <text key={i} x={xAt(i)} y={H - 6} textAnchor="middle"
+          fontSize="11" fontFamily="Inter, sans-serif"
+          fill={d.weight !== null ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.12)'}>
+          {d.label}
+        </text>
+      ))}
+      {segments.map((seg, si) => (
+        <path key={si}
+          d={seg.map((p, pi) => `${pi === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+          fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2"
+          strokeLinejoin="round" strokeLinecap="round" />
+      ))}
+      {days.map((d, i) => d.weight !== null && (
+        <g key={i}>
+          <circle cx={xAt(i)} cy={yAt(d.weight)} r="4" fill="white" opacity="0.9" />
+          <text x={xAt(i)} y={yAt(d.weight) - 10} textAnchor="middle"
+            fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.65)"
+            fontFamily="Inter, sans-serif">
+            {d.weight}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// ── Long-term trend chart ────────────────────────────────
 
 function WeightChart({ entries }) {
   if (entries.length < 2) {
@@ -77,11 +171,9 @@ function WeightChart({ entries }) {
     ? `M${xAt(0).toFixed(1)},${yAt(reg.intercept).toFixed(1)} L${xAt(recent.length - 1).toFixed(1)},${yAt(reg.slope * (recent.length - 1) + reg.intercept).toFixed(1)}`
     : null;
 
-  // Y grid labels
   const yTicks = [yLo + (yHi - yLo) * 0.1, (yLo + yHi) / 2, yHi - (yHi - yLo) * 0.1]
     .map(w => ({ y: yAt(w), label: w.toFixed(1) }));
 
-  // X labels (first + last)
   const xLabels = [
     { x: xAt(0), label: fmtDate(recent[0].date) },
     { x: xAt(recent.length - 1), label: fmtDate(recent[recent.length - 1].date) },
@@ -121,9 +213,11 @@ function WeightChart({ entries }) {
 // ── Main component ────────────────────────────────────────
 
 export default function BodyTab() {
-  const [entries, setEntries] = useState([]);
-  const [todayVal, setTodayVal] = useState('');
+  const [entries, setEntries]       = useState([]);
+  const [todayVal, setTodayVal]     = useState('');
   const [loggedToday, setLoggedToday] = useState(false);
+  const [editingDate, setEditingDate] = useState(null);
+  const [editVal, setEditVal]       = useState('');
   const profile = getProfile();
 
   useEffect(() => {
@@ -149,6 +243,22 @@ export default function BodyTab() {
     localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
     setEntries(updated);
     if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
+    if (date === editingDate) setEditingDate(null);
+  };
+
+  const startEdit = entry => {
+    setEditingDate(entry.date);
+    setEditVal(String(entry.weight));
+  };
+
+  const saveEdit = () => {
+    const w = parseFloat(editVal);
+    if (!w || !editingDate) { setEditingDate(null); return; }
+    const updated = entries.map(e => e.date === editingDate ? { ...e, weight: w } : e);
+    localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
+    setEntries(updated);
+    if (editingDate === todayStr()) setTodayVal(String(w));
+    setEditingDate(null);
   };
 
   const chronological = [...entries].reverse();
@@ -159,7 +269,6 @@ export default function BodyTab() {
   }));
   const displayWeeks = [...weeklyWithDelta].reverse().slice(0, 8);
 
-  // Trend status from last two complete weeks
   let trend = null;
   if (weeklyAvgs.length >= 2) {
     const delta = weeklyAvgs[weeklyAvgs.length - 1].avg - weeklyAvgs[weeklyAvgs.length - 2].avg;
@@ -201,7 +310,15 @@ export default function BodyTab() {
         </div>
       </div>
 
-      {/* Chart + trend */}
+      {/* Last 7 days chart */}
+      {entries.length > 0 && (
+        <div className="card">
+          <h3>Last 7 Days</h3>
+          <Last7DaysChart entries={entries} />
+        </div>
+      )}
+
+      {/* Long-term trend chart */}
       {entries.length > 0 && (
         <div className="card">
           <div className="card-row-hd">
@@ -266,7 +383,25 @@ export default function BodyTab() {
                     {fmtDate(e.date)}
                     {e.date === todayStr() && <span className="today-pill">Today</span>}
                   </span>
-                  <span className="wl-val">{e.weight} lbs</span>
+                  {editingDate === e.date ? (
+                    <input
+                      type="number" step="0.1" className="wl-edit-input"
+                      value={editVal}
+                      onChange={ev => setEditVal(ev.target.value)}
+                      onKeyDown={ev => {
+                        if (ev.key === 'Enter') saveEdit();
+                        if (ev.key === 'Escape') setEditingDate(null);
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="wl-val">{e.weight} lbs</span>
+                  )}
+                  {editingDate === e.date ? (
+                    <button className="icon-btn confirm" onClick={saveEdit}>✓</button>
+                  ) : (
+                    <button className="icon-btn" onClick={() => startEdit(e)}>✎</button>
+                  )}
                   <button className="icon-btn danger" onClick={() => deleteEntry(e.date)}>×</button>
                 </div>
               ))}
