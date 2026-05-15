@@ -40,7 +40,7 @@ function getWeeklyAverages(entries) {
     if (!e || !e.date) return;
     const w = weekOf(e.date);
     if (!map[w]) map[w] = [];
-    map[w].push(e.weight);
+    map[w].push(Number(e.weight));
   });
   return Object.entries(map)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -245,12 +245,16 @@ export default function BodyTab() {
   };
 
   const deleteEntry = (id, date) => {
-    const updated = entries.filter(e => e && e.id !== id);
-    localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
-    setEntries(updated);
-    if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
-    if (date === editingDate) setEditingDate(null);
-    deleteSupabaseBodyWeight(date);
+    try {
+      const updated = entries.filter(e => e && e.id !== id);
+      setEntries(updated);
+      localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
+      if (date === todayStr()) { setTodayVal(''); setLoggedToday(false); }
+      if (date === editingDate) setEditingDate(null);
+      deleteSupabaseBodyWeight(date);
+    } catch (err) {
+      console.error('[BodyTab] deleteEntry failed:', err);
+    }
   };
 
   const startEdit = entry => {

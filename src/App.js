@@ -107,7 +107,7 @@ export default function App() {
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
     };
-  }, []);
+  }, [dbReady]); // re-run once dbReady flips true so the slider is in the DOM
 
   if (!dbReady) {
     return (
