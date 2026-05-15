@@ -246,14 +246,21 @@ export default function BodyTab() {
 
   const deleteEntry = (id, date) => {
     try {
-      const updated = entries.filter(e => e && e.id !== id);
+      const current = Array.isArray(entries) ? entries : [];
+      const updated = current.filter(
+        e => e != null && typeof e === 'object' && e.id !== id
+      );
       setEntries(updated);
-      localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
-      if (date === todayStr()) {
+      try {
+        localStorage.setItem('gainz_bodyweight', JSON.stringify(updated));
+      } catch (storageErr) {
+        console.warn('[BodyTab] localStorage write failed:', storageErr);
+      }
+      if (typeof date === 'string' && date === todayStr()) {
         setTodayVal('');
         setLoggedToday(false);
       }
-      if (date === editingDate) setEditingDate(null);
+      setEditingDate(prev => (prev === date ? null : prev));
       deleteSupabaseBodyWeight(date);
     } catch (err) {
       console.error('[BodyTab] deleteEntry failed:', err);
@@ -277,7 +284,10 @@ export default function BodyTab() {
     setEditingDate(null);
   };
 
-  const chronological = [...entries].reverse();
+  const safeEntries = Array.isArray(entries)
+    ? entries.filter(e => e != null && typeof e === 'object' && e.id != null && e.date && e.weight != null)
+    : [];
+  const chronological = [...safeEntries].reverse();
   const weeklyAvgs = getWeeklyAverages(chronological);
   const weeklyWithDelta = weeklyAvgs.map((w, i) => ({
     ...w,
@@ -327,15 +337,15 @@ export default function BodyTab() {
       </div>
 
       {/* Last 7 days chart */}
-      {entries.length > 0 && (
+      {safeEntries.length > 0 && (
         <div className="card">
           <h3>Last 7 Days</h3>
-          <Last7DaysChart entries={entries} />
+          <Last7DaysChart entries={safeEntries} />
         </div>
       )}
 
       {/* Long-term trend chart */}
-      {entries.length > 0 && (
+      {safeEntries.length > 0 && (
         <div className="card">
           <div className="card-row-hd">
             <h3>Trend</h3>
@@ -363,7 +373,7 @@ export default function BodyTab() {
       )}
 
       {/* Bottom section: weekly averages + log */}
-      {entries.length > 0 && (
+      {safeEntries.length > 0 && (
         <div className="body-two-col">
 
           <div className="card">
@@ -393,7 +403,7 @@ export default function BodyTab() {
           <div className="card">
             <h3>Log</h3>
             <div className="wl-list">
-              {entries.slice(0, 20).map(e => (
+              {safeEntries.slice(0, 20).map(e => (
                 <div key={e.id} className="wl-item">
                   <span className="wl-date">
                     {fmtDate(e.date)}
@@ -427,7 +437,7 @@ export default function BodyTab() {
         </div>
       )}
 
-      {entries.length === 0 && (
+      {safeEntries.length === 0 && (
         <p className="empty-state">No weight logged yet. Enter today's weight above to start tracking your trend.</p>
       )}
 
