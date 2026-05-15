@@ -126,15 +126,30 @@ body {
 .tab-content {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.tab-slider {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.tab-slide {
+  flex: 0 0 100vw;
+  width: 100vw;
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--surface-3) transparent;
 }
 
-.tab-content::-webkit-scrollbar { width: 5px; }
-.tab-content::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
-.tab-content::-webkit-scrollbar-track { background: transparent; }
+.tab-slide::-webkit-scrollbar { width: 5px; }
+.tab-slide::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
+.tab-slide::-webkit-scrollbar-track { background: transparent; }
 
 /* ── Content column ────────────────────────────────────── */
 .tab-pane {
