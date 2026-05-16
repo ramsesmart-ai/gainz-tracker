@@ -47,6 +47,11 @@ export default function App() {
     if (!el) return;
 
     const onTouchStart = e => {
+      // Cancel any running transition and lock to the current tab before
+      // tracking the new gesture — prevents mid-animation swipes getting stuck
+      el.style.transition = 'none';
+      el.style.transform  = `translateX(${-tabIndexRef.current * 100}vw)`;
+
       touchStartX.current    = e.touches[0].clientX;
       touchStartY.current    = e.touches[0].clientY;
       lockedVertical.current = false;
@@ -98,14 +103,24 @@ export default function App() {
       if (next !== idx) setTabIndex(next);
     };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true  });
-    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
-    el.addEventListener('touchend',   onTouchEnd,   { passive: true  });
+    const onTransitionEnd = () => {
+      // Safety net: after every animation ends, snap to the exact integer tab
+      // position so floating-point drift or an interrupted transition can't
+      // leave the slider stranded between tabs
+      el.style.transition = 'none';
+      el.style.transform  = `translateX(${-tabIndexRef.current * 100}vw)`;
+    };
+
+    el.addEventListener('touchstart',    onTouchStart,    { passive: true  });
+    el.addEventListener('touchmove',     onTouchMove,     { passive: false });
+    el.addEventListener('touchend',      onTouchEnd,      { passive: true  });
+    el.addEventListener('transitionend', onTransitionEnd, { passive: true  });
 
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove',  onTouchMove);
-      el.removeEventListener('touchend',   onTouchEnd);
+      el.removeEventListener('touchstart',    onTouchStart);
+      el.removeEventListener('touchmove',     onTouchMove);
+      el.removeEventListener('touchend',      onTouchEnd);
+      el.removeEventListener('transitionend', onTransitionEnd);
     };
   }, [dbReady]); // re-run once dbReady flips true so the slider is in the DOM
 
